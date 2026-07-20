@@ -1,10 +1,12 @@
 import { z } from "zod"
 
 // Lightweight models optimized for token efficiency while maintaining quality
+// Note: ChatGPT accounts don't support explicit model selection - use empty string
 const MODEL_DEFAULTS = {
-  openai: "gpt-4.1-mini", // ~100x cheaper than GPT-4.1, excellent vision
-  gemini: "gemini-2.5-flash-exp", // Fast and efficient vision
-  openai_fast: "gpt-4o-mini", // Great multimodal, very efficient
+  openai: "gpt-4.1-mini", // ~100x cheaper than GPT-4.1, excellent vision (API only)
+  gemini: "gemini-2.5-flash-exp", // Fast and efficient vision (API only)
+  openai_fast: "gpt-4o-mini", // Great multimodal, very efficient (API only)
+  auto: "", // Use Codex's default model (works with ChatGPT accounts)
 }
 
 const configSchema = z.object({
@@ -13,13 +15,14 @@ const configSchema = z.object({
   SUBSCRIPTION_LLM_TOKEN: z.string().min(16).optional(),
   CODEX_BIN: z.string().default("codex"),
 
-  // Model configuration - default to lightweight options
+  // Model configuration - default to auto (Codex's default model)
   DEFAULT_MODEL: z
     .string()
-    .default(MODEL_DEFAULTS.openai),
+    .default(MODEL_DEFAULTS.auto),
   ALLOWED_MODELS: z
     .array(z.string())
     .default([
+      MODEL_DEFAULTS.auto, // Empty string = use Codex default
       MODEL_DEFAULTS.openai,
       MODEL_DEFAULTS.openai_fast,
       MODEL_DEFAULTS.gemini,

@@ -66,17 +66,64 @@ function buildPrompt(messages: ChatRequest["messages"]): string {
 
   for (const message of messages) {
     const role = message.role.toUpperCase()
+    let content: string
+
+    // Extract text from content (handles both string and array formats)
+    if (typeof message.content === "string") {
+      content = message.content
+    } else {
+      // Array format - extract only text parts (images are handled separately via --image flags)
+      content = message.content
+        .filter((item) => item.type === "text")
+        .map((item) => (item.type === "text" ? item.text : ""))
+        .join("\n")
+    }
+
     if (role === "SYSTEM") {
-      parts.push(`[SYSTEM INSTRUCTIONS]\n${message.content}\n`)
+      parts.push(`[SYSTEM INSTRUCTIONS]\n${content}\n`)
     } else if (role === "USER") {
-      parts.push(`[USER REQUEST]\n${message.content}\n`)
+      parts.push(`[USER REQUEST]\n${content}\n`)
     } else {
       // ASSISTANT
-      parts.push(`[ASSISTANT RESPONSE]\n${message.content}\n`)
+      parts.push(`[ASSISTANT RESPONSE]\n${content}\n`)
     }
   }
 
   return parts.join("\n")
+}
+
+/**
+ * Normalize JSON Schema for Codex's --output-schema flag.
+ * Codex requires:
+ * - "additionalProperties": false (for object types)
+ * - "required" array with all property names
+ */
+function normalizeSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...schema }
+
+  // For object type, ensure additionalProperties is false
+  if (normalized.type === "object" && normalized.additionalProperties !== false) {
+    normalized.additionalProperties = false
+  }
+
+  // Ensure required array exists and contains all property names
+  if (normalized.type === "object" && typeof normalized.properties === "object" && normalized.properties !== null) {
+    const properties = normalized.properties as Record<string, unknown>
+    const propertyNames = Object.keys(properties)
+
+    if (!Array.isArray(normalized.required)) {
+      normalized.required = propertyNames
+    } else {
+      // Merge existing required with all property names
+      const existing = new Set(normalized.required as string[])
+      for (const name of propertyNames) {
+        existing.add(name)
+      }
+      normalized.required = Array.from(existing)
+    }
+  }
+
+  return normalized
 }
 
 async function runCodex(
@@ -96,7 +143,7 @@ async function runCodex(
     "--output-last-message", join(workingDirectory, "response.json"),
     ...(outputSchemaPath ? ["--output-schema", outputSchemaPath] : []),
     ...(imagePaths.length > 0 ? imagePaths.flatMap((p) => ["--image", p]) : []),
-    ...(model ? ["-m", model] : []),
+    ...(model && model.trim() ? ["-m", model] : []), // Only pass model if not empty
     "-C",
     workingDirectory,
     "--skip-git-repo-check",
@@ -184,10 +231,11 @@ export async function executeChatRequest(
 
     const imagePaths = await Promise.all(imageWrites)
 
-    // Write output schema if provided
+    // Write output schema if provided (normalize for Codex requirements)
     let outputSchemaPath: string | undefined
     if (request.outputSchema) {
-      outputSchemaPath = await writeOutputSchema(jobDirectory, request.outputSchema)
+      const normalizedSchema = normalizeSchema(request.outputSchema)
+      outputSchemaPath = await writeOutputSchema(jobDirectory, normalizedSchema)
     }
 
     // Build prompt from messages

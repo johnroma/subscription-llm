@@ -29,9 +29,14 @@ console.log(`  GET  /v1/models         - List available models`)
 console.log(`  POST /v1/chat/completions - Chat completion (vision + structured output)`)
 console.log("")
 console.log("Default models (optimized for token efficiency):")
-console.log(`  ${MODEL_DEFAULTS.openai} - Best balance of vision, intelligence, and cost`)
-console.log(`  ${MODEL_DEFAULTS.openai_fast} - Faster multimodal alternative`)
-console.log(`  ${MODEL_DEFAULTS.gemini} - Fast and efficient vision`)
+if (config.DEFAULT_MODEL === "") {
+  console.log(`  (auto) - Use Codex's default model (works with ChatGPT accounts)`)
+} else {
+  console.log(`  ${config.DEFAULT_MODEL} - Default model`)
+}
+console.log(`  ${MODEL_DEFAULTS.openai} - Best balance of vision, intelligence, and cost (API only)`)
+console.log(`  ${MODEL_DEFAULTS.openai_fast} - Faster multimodal alternative (API only)`)
+console.log(`  ${MODEL_DEFAULTS.gemini} - Fast and efficient vision (API only)`)
 console.log("")
 console.log("=".repeat(60))
 
