@@ -4,16 +4,10 @@ import { loadConfig, MODEL_DEFAULTS } from "./config.js"
 const config = loadConfig()
 const app = createApp(config)
 
-const server = Bun.serve({
-  port: config.PORT,
-  hostname: config.HOST,
-  fetch: app.fetch,
-})
-
 console.log("")
-console.log("=" * 60)
+console.log("=".repeat(60))
 console.log("  subscription-llm")
-console.log("=" * 60)
+console.log("=".repeat(60))
 console.log("")
 console.log(`  Server: http://${config.HOST}:${config.PORT}`)
 console.log(`  Default model: ${config.DEFAULT_MODEL}`)
@@ -39,7 +33,15 @@ console.log(`  ${MODEL_DEFAULTS.openai} - Best balance of vision, intelligence, 
 console.log(`  ${MODEL_DEFAULTS.openai_fast} - Faster multimodal alternative`)
 console.log(`  ${MODEL_DEFAULTS.gemini} - Fast and efficient vision`)
 console.log("")
-console.log("=" * 60)
+console.log("=".repeat(60))
+
+const server = Bun.serve({
+  port: config.PORT,
+  hostname: config.HOST,
+  fetch: app.fetch,
+})
+
+console.log(`\n🚀 Server running on http://${config.HOST}:${config.PORT}\n`)
 
 // Graceful shutdown
 const shutdown = async (signal: string) => {
