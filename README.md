@@ -1,176 +1,98 @@
 # subscription-llm
 
-Local HTTP service for Codex subscription-based chat/vision with structured output. Optimized for lightweight models to minimize OpenAI subscription token usage.
+A local HTTP service that routes vision and structured-output requests through an authenticated Codex CLI session. It is intended for personal, local use by projects such as `wc-flight-reader`.
 
-## Features
+> Codex ChatGPT accounts select the model automatically. Supplying API model IDs such as `gpt-4.1-mini` or `gpt-4o-mini` is not supported by those accounts, so omit `model` unless your Codex account supports explicit model selection.
 
-- **Vision + Structured Output**: Send images and get back structured JSON using Codex's `--output-schema`
-- **Token-Optimized Models**: Defaults to `gpt-4.1-mini` (~100x cheaper than GPT-4.1) for flight data extraction
-- **OpenAI-Compatible**: `/v1/chat/completions` endpoint matches OpenAI's API contract
-- **Concurrent Request Management**: Configurable concurrency limits for subscription budget control
-- **Multiple Model Support**: Works with GPT-4.1-mini, GPT-4o-mini, Gemini 2.5 Flash, etc.
-
-## Quick Start
+## Quick start
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Start the service
-pnpm dev
-
-# Production build
-pnpm build && pnpm start
+bun install
+bun dev
 ```
 
-The server starts on `http://127.0.0.1:8789` by default.
+The service listens on `http://127.0.0.1:8789` by default.
 
-## Configuration
+## API
 
-Environment variables:
+### `POST /v1/chat/completions`
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Server host (use loopback for no auth) |
-| `PORT` | `8789` | Server port |
-| `SUBSCRIPTION_LLM_TOKEN` | - | Optional Bearer token for non-loopback hosts |
-| `CODEX_BIN` | `codex` | Path to Codex CLI executable |
-| `DEFAULT_MODEL` | `gpt-4.1-mini` | Default model to use |
-| `ALLOWED_MODELS` | `gpt-4.1-mini,gpt-4o-mini,gemini-2.5-flash-exp` | Allowed models |
-| `MAX_CONCURRENT_REQUESTS` | `8` | Max concurrent requests |
-| `REQUEST_TIMEOUT_MS` | `120000` | Request timeout (2 minutes) |
-
-## Usage
-
-### Chat Completion with Vision and Structured Output
-
-```bash
-curl -X POST http://127.0.0.1:8789/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "gpt-4.1-mini",
-    "messages": [
-      {
-        "role": "system",
-        "content": "Extract structured flight data from this screenshot. Return only JSON."
-      },
-      {
-        "role": "user",
-        "content": [
-          { "type": "text", "text": "Analyze this flight booking:" },
-          {
-            "type": "image",
-            "image": {
-              "data": "<base64-encoded-image>",
-              "mimeType": "image/png"
-            }
-          }
-        ]
-      }
-    ],
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "origin": { "type": "string" },
-        "destination": { "type": "string" },
-        "date": { "type": "string" },
-        "price": { "type": "number" }
-      },
-      "required": ["origin", "destination", "date", "price"]
-    }
-  }'
-```
-
-### Response
+The endpoint accepts text and base64-encoded images. `outputSchema` is JSON Schema; object schemas are normalized for Codex strict structured output automatically.
 
 ```json
 {
-  "id": "chatcmpl-1234567890",
-  "model": "gpt-4.1-mini",
-  "provider": "codex",
-  "choices": [
+  "messages": [
     {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "{\n  \"origin\": \"JFK\",\n  \"destination\": \"LAX\",\n  \"date\": \"2026-01-15\",\n  \"price\": 450\n}"
-      },
-      "finishReason": "stop"
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Extract the flight itinerary." },
+        {
+          "type": "image",
+          "image": {
+            "data": "<base64 image bytes>",
+            "mimeType": "image/png"
+          }
+        }
+      ]
     }
   ],
-  "usage": {
-    "promptTokens": 1250,
-    "completionTokens": 45,
-    "totalTokens": 1295
-  },
-  "created": 1737321600,
-  "processingTimeMs": 3240
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "origin": { "type": "string" },
+      "destination": { "type": "string" }
+    },
+    "required": ["origin", "destination"]
+  }
 }
 ```
 
-## Model Recommendations
+The result is shaped like:
 
-### For Flight Screenshot Extraction
-
-| Model | Vision Quality | Token Cost | Recommended? |
-|-------|---------------|-------------|---------------|
-| `gpt-4.1-mini` | Excellent | ~100x cheaper than GPT-4.1 | ✅ **Default** |
-| `gpt-4o-mini` | Very Good | ~100x cheaper than GPT-4o | ✅ Faster alternative |
-| `gemini-2.5-flash-exp` | Good | Competitive | ⚠️ May need prompt adjustments |
-
-### General Guidelines
-
-- Use `gpt-4.1-mini` for best accuracy/cost balance
-- Use `gpt-4o-mini` if you need faster responses
-- Keep prompts concise to save tokens
-- Use `outputSchema` for structured output (Codex handles this via `--output-schema`)
-
-## Integration with wc-flight-reader
-
-```html
-<flight-reader 
-  provider="openai"
-  proxy-url="http://127.0.0.1:8789/v1/chat/completions"
-></flight-reader>
+```json
+{
+  "choices": [{
+    "message": { "role": "assistant", "content": "{...valid JSON...}" }
+  }],
+  "usage": {
+    "promptTokens": 14363,
+    "completionTokens": 200,
+    "totalTokens": 14563
+  }
+}
 ```
 
-Set `apiKey` on the component (can be a dummy value when using proxy mode).
+`usage` is read from Codex's `turn.completed` event when available. It includes the true input usage reported by Codex (including image/context tokens), not a character-count estimate.
+
+### Other endpoints
+
+- `GET /health`
+- `GET /v1/models`
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `HOST` | `127.0.0.1` | Bind address. Keep loopback unless protected with a token. |
+| `PORT` | `8789` | Bind port. |
+| `SUBSCRIPTION_LLM_TOKEN` | — | Optional Bearer token. Required for non-loopback deployments. |
+| `CODEX_BIN` | `codex` | Path to Codex CLI. |
+| `DEFAULT_MODEL` | empty | Empty means use Codex's account default. |
+| `MAX_CONCURRENT_REQUESTS` | `8` | Maximum Codex processes. |
+| `REQUEST_TIMEOUT_MS` | `120000` | Per-request timeout. |
+
+CORS is enabled because a local browser application normally runs on a different localhost port than this service. Keep the default loopback host for local-only use.
+
+## Test result
+
+An Emirates ARN → DXB → SIN itinerary screenshot was extracted successfully using the complete `FlightItinerary` schema. Codex reported **14,363 input tokens** and **200 output tokens** for that request. The image itself did not display a price, so consumers should treat any model-supplied price as untrusted unless it is visibly present.
 
 ## Development
 
 ```bash
-# Type check
-pnpm typecheck
-
-# Development with hot reload
-pnpm dev
-
-# Build for production
-pnpm build
-
-# Start production server
-pnpm start
+bun run typecheck
+bun run build
 ```
-
-## Architecture
-
-```
-wc-flight-reader (or any client)
-  → HTTP POST /v1/chat/completions
-  → subscription-llm (this service)
-    → codex exec --json --output-schema schema.json --image ...
-      → Codex CLI (subscription)
-      → OpenAI/Gemini API (via subscription)
-    → Parse response and return structured JSON
-```
-
-## Why This Service?
-
-1. **Subscription Budget Control**: Centralize all Codex subscription usage with concurrency limits
-2. **Token Optimization**: Default to lightweight models (gpt-4.1-mini) instead of full models
-3. **Structured Output**: Use Codex's `--output-schema` for reliable JSON responses
-4. **Multi-Project Use**: Any project can use this service for vision + structured output
-5. **OpenAI Compatibility**: Drop-in replacement for OpenAI's chat completions API
 
 ## License
 

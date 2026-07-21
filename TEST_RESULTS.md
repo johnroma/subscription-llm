@@ -1,80 +1,27 @@
-# subscription-llm - Test Results
+# Test results
 
-## Test Date
-2025-07-21
+## Flight screenshot extraction
 
-## Test Screenshot
-Emirates flight booking: Stockholm (ARN) → Dubai (DXB) → Singapore (SIN)
+Tested against an Emirates itinerary screenshot showing:
 
-## Results
+- ARN → DXB: EK 158, 3:35 PM–12:10 AM, 6h 35m
+- 2h 10m Dubai layover
+- DXB → SIN: EK 348, 2:20 AM–2:05 PM, 7h 45m
 
-### Performance
-| Metric | Value |
-|--------|-------|
-| **Response Time** | 10,558 ms (~10.5 seconds) |
-| **Prompt Tokens** | ~100 (estimated) |
-| **Completion Tokens** | ~50 (estimated) |
-| **Total Tokens** | 150 |
-| **Model Used** | Codex default (ChatGPT account) |
+The complete `FlightItinerary` JSON Schema, including nested segment objects, was accepted by Codex strict structured output. The service returned the two flights as ordered outbound segments with ISO datetimes.
 
-### Extracted Data
-```json
-{
-  "origin": "Stockholm Arlanda Airport (ARN)",
-  "destination": "Singapore Changi Airport (SIN)",
-  "departureDate": "Tue, Aug 4",
-  "departureTime": "3:35 PM",
-  "arrivalDate": "Wed, Aug 5",
-  "arrivalTime": "2:05 PM",
-  "flightNumber": "EK 158 / EK 348",
-  "airline": "Emirates"
-}
-```
+## Measured usage
 
-### Full Flight Details Detected
+| Metric | Result |
+| --- | ---: |
+| Response time | ~10 seconds |
+| Codex input tokens | 14,363 |
+| Codex output tokens | 200 |
+| Total reported tokens | 14,563 |
 
-**Flight 1: EK 158**
-- Departure: Stockholm Arlanda (ARN), Aug 4, 3:35 PM
-- Arrival: Dubai International (DXB), Aug 5, 12:10 AM
-- Duration: 6h 35m
-- Aircraft: Boeing 777
-- Cabin: Economy
+These values come from Codex's `turn.completed` JSONL event. Earlier character-count estimates (such as 150 tokens) excluded image and Codex context tokens and were incorrect.
 
-**Layover**
-- Duration: 2h 10m in Dubai (DXB)
+## Notes
 
-**Flight 2: EK 348**
-- Departure: Dubai International (DXB), Aug 5, 2:20 AM
-- Arrival: Singapore Changi (SIN), Aug 5, 2:05 PM
-- Duration: 7h 45m
-- Aircraft: Boeing 777
-- Cabin: Economy
-- Note: Overnight flight
-
-### Price Detection
-- **Status:** Correctly identified that no prices are visible in the screenshot
-- The model accurately reported that the screenshot contains only itinerary details
-
-## Conclusion
-
-✅ **subscription-llm is fully functional**
-
-- Vision analysis works perfectly
-- Structured output (JSON Schema) works as expected
-- Token efficiency is excellent (150 tokens for complex flight extraction)
-- Codex integration with ChatGPT account is working
-- Model correctly handles edge cases (missing information)
-
-## Next Steps for wc-flight-reader Integration
-
-1. Update wc-flight-reader to use `proxy-url="http://127.0.0.1:8789/v1/chat/completions"`
-2. Set `apiKey="proxy"` (dummy value when using proxy mode)
-3. Test with various flight booking screenshots
-4. Monitor token usage and performance
-
-## Token Cost Analysis
-
-With ~150 tokens per flight screenshot extraction:
-- 100 screenshots = ~15,000 tokens
-- At ChatGPT Plus rates (~$20/month): effectively free
-- This is far more efficient than direct API calls with larger models
+- The screenshot did not visibly show a price. The model may still fabricate a plausible value, so the client prompt explicitly instructs it to use `null` for values not visible in the image.
+- A structured schema guarantees shape, not factual accuracy. Consumers should validate data before using it for booking or payment decisions.

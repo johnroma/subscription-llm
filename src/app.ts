@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto"
 import { Hono } from "hono"
+import { cors } from "hono/cors"
 import type { Config } from "./config.js"
 import { CapacityError, ConcurrencyGate } from "./concurrency.js"
 import { executeChatRequest, CodexExecutionError } from "./providers/codex.js"
@@ -14,6 +15,10 @@ import {
 export function createApp(config: Config) {
   const app = new Hono()
   const gate = new ConcurrencyGate(config.MAX_CONCURRENT_REQUESTS)
+
+  // The service is normally loopback-only, but browser clients (such as the
+  // wc-flight-reader demo) use a different localhost port.
+  app.use("*", cors())
 
   // Health check
   app.get("/health", (c) =>

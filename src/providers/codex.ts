@@ -99,31 +99,51 @@ function buildPrompt(messages: ChatRequest["messages"]): string {
  * - "required" array with all property names
  */
 function normalizeSchema(schema: Record<string, unknown>): Record<string, unknown> {
-  const normalized = { ...schema }
+  const normalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(normalize)
+    if (typeof value !== "object" || value === null) return value
 
-  // For object type, ensure additionalProperties is false
-  if (normalized.type === "object" && normalized.additionalProperties !== false) {
-    normalized.additionalProperties = false
+    const normalized = Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, normalize(child)])
+    ) as Record<string, unknown>
+
+    // Codex's strict JSON Schema mode requires every object to disallow
+    // unknown keys and list every declared key in `required` (use null for
+    // values that are semantically optional).
+    if (normalized.type === "object" || "properties" in normalized) {
+      const properties = normalized.properties as Record<string, unknown> | undefined
+      normalized.additionalProperties = false
+      if (properties) normalized.required = Object.keys(properties)
+    }
+
+    return normalized
   }
 
-  // Ensure required array exists and contains all property names
-  if (normalized.type === "object" && typeof normalized.properties === "object" && normalized.properties !== null) {
-    const properties = normalized.properties as Record<string, unknown>
-    const propertyNames = Object.keys(properties)
+  return normalize(schema) as Record<string, unknown>
+}
 
-    if (!Array.isArray(normalized.required)) {
-      normalized.required = propertyNames
-    } else {
-      // Merge existing required with all property names
-      const existing = new Set(normalized.required as string[])
-      for (const name of propertyNames) {
-        existing.add(name)
+function readCodexUsage(output: string):
+  | { promptTokens: number; completionTokens: number }
+  | undefined {
+  for (const line of output.split("\n").reverse()) {
+    try {
+      const event = JSON.parse(line) as {
+        type?: string
+        usage?: { input_tokens?: number; output_tokens?: number }
       }
-      normalized.required = Array.from(existing)
+      if (event.type === "turn.completed" && event.usage) {
+        const promptTokens = event.usage.input_tokens
+        const completionTokens = event.usage.output_tokens
+        if (typeof promptTokens === "number" && typeof completionTokens === "number") {
+          return { promptTokens, completionTokens }
+        }
+      }
+    } catch {
+      // stderr may be interleaved with Codex's JSONL output.
     }
   }
 
-  return normalized
+  return undefined
 }
 
 async function runCodex(
@@ -243,7 +263,7 @@ export async function executeChatRequest(
 
     // Run Codex exec
     const model = request.model || config.DEFAULT_MODEL
-    await runCodex(
+    const codexResult = await runCodex(
       config.CODEX_BIN,
       jobDirectory,
       model,
@@ -282,10 +302,11 @@ export async function executeChatRequest(
 
     const processingTimeMs = Date.now() - startTime
 
-    // Estimate token usage (Codex doesn't provide this, so we approximate)
-    const promptText = prompt
-    const promptTokens = Math.ceil(promptText.length / 4)
-    const completionTokens = Math.ceil(assistantMessage.length / 4)
+    // Codex emits actual usage in its JSONL turn.completed event. Fall back
+    // only when that event is unavailable.
+    const codexUsage = readCodexUsage(codexResult.output)
+    const promptTokens = codexUsage?.promptTokens ?? Math.ceil(prompt.length / 4)
+    const completionTokens = codexUsage?.completionTokens ?? Math.ceil(assistantMessage.length / 4)
 
     return {
       id: `chatcmpl-${Date.now()}`,
