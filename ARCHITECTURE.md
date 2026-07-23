@@ -144,34 +144,19 @@ pnpm build
 pnpm start
 ```
 
-### Systemd Service (Optional)
+### Systemd User Service
 
-```ini
-# /etc/systemd/system/subscription-llm.service
-[Unit]
-Description=Subscription LLM Service
-After=network.target
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/home/john/projects/subscription-llm.workspace/subscription-llm
-Environment="NODE_ENV=production"
-Environment="HOST=127.0.0.1"
-Environment="PORT=8789"
-ExecStart=/usr/bin/node dist/server.js
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
+The versioned unit is [`deploy/subscription-llm.service`](deploy/subscription-llm.service). It uses Bun, rebuilds before each start, and is configured to start after reboot (user lingering is enabled for `john`).
 
 ```bash
-sudo systemctl enable subscription-llm
-sudo systemctl start subscription-llm
-sudo systemctl status subscription-llm
+install -Dm644 deploy/subscription-llm.service \
+  ~/.config/systemd/user/subscription-llm.service
+systemctl --user daemon-reload
+systemctl --user enable --now subscription-llm.service
+systemctl --user status subscription-llm.service
 ```
+
+`saveatrip.service` requires and starts after this unit.
 
 ## Testing
 

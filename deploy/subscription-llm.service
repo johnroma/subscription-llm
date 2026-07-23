@@ -1,0 +1,25 @@
+# Reference copy — install at:
+#   ~/.config/systemd/user/subscription-llm.service
+# Reload with: systemctl --user daemon-reload && systemctl --user restart subscription-llm
+[Unit]
+Description=subscription-llm — local Codex API on 127.0.0.1:8789
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+WorkingDirectory=/home/john/projects/subscription-llm.workspace/subscription-llm
+Environment=HOME=/home/john
+Environment=PATH=/home/john/.bun/bin:/home/john/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOST=127.0.0.1
+Environment=PORT=8789
+Environment=CODEX_BIN=/home/john/.local/bin/codex
+# Build before every start so the checked-out source and running service cannot diverge.
+ExecStartPre=/home/john/.bun/bin/bun build src/server.ts --outdir dist --target bun
+ExecStart=/home/john/.bun/bin/bun dist/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
